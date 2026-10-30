@@ -1,0 +1,10 @@
+[Unit]
+Description=Select a finite digest from followed X accounts
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/.config/herdr-digest
+ExecStart=%h/.config/herdr-app/mods/digest/collect.py --due
+TimeoutStartSec=10min
+UMask=0077

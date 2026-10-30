@@ -1,0 +1,9 @@
+[Unit]
+Description=Check whether a scheduled X digest is due
+
+[Timer]
+OnStartupSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
