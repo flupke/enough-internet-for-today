@@ -1,22 +1,23 @@
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { appHome, readTextFile, exec, theme, props, nextCommand, setShared } from "herdr";
+import { appHome, readTextFile, exec, theme, props, nextCommand, setShared, run } from "herdr";
 
 export default class Digest extends View {
   init(_props, cx) {
     this.data = {items: [], status: "Waiting for the first scheduled digest"};
     this.finished = false;
     this.error = "";
+    this.progress = {};
     this.demo = !!props()?.demo;
     if (this.demo) this.command("sample", cx);
     else this.reload(cx);
-    cx.timer.every(60000, cx => this.reload(cx));
+    cx.timer.every(15000, cx => this.reload(cx));
     cx.spawn(async cx => {
       for (;;) { this.command(await nextCommand(), cx); cx.notify(); }
     });
   }
   debug(last = "load") {
-    setShared("digest.debug", {last, demo: this.demo, finished: this.finished, error: this.error, ...this.data});
+    setShared("digest.debug", {last, demo: this.demo, finished: this.finished, error: this.error, progress: this.progress, ...this.data});
   }
   reload(cx) {
     if (this.demo) return;
@@ -29,6 +30,8 @@ export default class Digest extends View {
           if (next.id !== this.data.id) this.finished = localStorage.getItem("finished") === next.id;
           this.data = next;
         }
+        const progress = await readTextFile(`${appHome()}/data/digest/progress.json`);
+        this.progress = progress ? JSON.parse(progress) : {};
         const status = await readTextFile(`${appHome()}/data/digest/status.json`);
         this.error = status ? JSON.parse(status).error || "" : "";
       } catch (e) { this.error = String(e); }
@@ -36,22 +39,25 @@ export default class Digest extends View {
     });
   }
   command(command, cx) {
-    if (command === "finish") {
+    if (command === "peek" && this.progress.helper) {
+      run("terminal.peek", {terminal: this.progress.helper});
+    } else if (command === "finish") {
       this.finished = true;
       if (!this.demo && this.data.id) localStorage.setItem("finished", this.data.id);
     } else if (command === "sample" && this.demo) {
       this.finished = false;
       this.error = "";
-      this.data = {id:"sample", status:"Preview · sample content", next:"Today at 18:00", sources:["X · followed accounts · sample"], items:[
+      this.data = {id:"sample", status:"Preview · sample content", next:"Today at 18:00", sources:["X · followed accounts · sample", "Slack · public channels · sample", "Email · inbox · sample"], items:[
         {title:"A release with a useful new capability", summary:"A followed developer announced a release and explained the practical change. Repeated reactions have been left out of this selection.", why:"A concrete update with enough detail to assess.", source:"X · sample", url:"https://x.com"},
-        {title:"A technical explanation worth keeping", summary:"A followed account shared a focused explanation of a design tradeoff. This is sample text used to check the reading experience.", why:"Substantive context, without the surrounding conversation.", source:"X · sample", url:"https://x.com"}
+        {title:"A technical explanation worth keeping", summary:"A followed account shared a focused explanation of a design tradeoff. This is sample text used to check the reading experience.", why:"Substantive context, without the surrounding conversation.", source:"Slack · sample", url:"https://example.slack.com/archives/C1/p123"},
+        {title:"A decision in your inbox", summary:"A sample email contains a decision that needs your attention before tomorrow.", why:"A concrete next action with a deadline.", source:"Email · sample", url:"https://mail.google.com/mail/u/0/#inbox/sample"}
       ]};
     } else if (command === "empty" && this.demo) {
-      this.finished = false; this.error = ""; this.data = {status:"Preview · no relevant updates", sources:["X · followed accounts · sample"], items:[], next:"Today at 18:00"};
+      this.finished = false; this.error = ""; this.data = {status:"Preview · no relevant updates", sources:["X · followed accounts · sample", "Slack · public channels · sample", "Email · inbox · sample"], items:[], next:"Today at 18:00"};
     } else if (command === "failure" && this.demo) {
       this.finished = false;
-      this.error = "Sample connection failure. The previous digest is preserved.";
-      this.data = {...this.data, status:"Collection needs attention", sources:["X · connection failed · sample"]};
+      this.error = "Sample Slack connection failure. Other source items remain available.";
+      this.data = {...this.data, status:"Collection needs attention", sources:["X · sample", "Slack · failed · sample", "Email · sample"]};
     } else if (command.startsWith("open:")) {
       const item = this.data.items[Number(command.slice(5))];
       if (item && /^https:\/\//.test(item.url)) cx.spawn(async cx => {
@@ -75,6 +81,8 @@ export default class Digest extends View {
       div().text_color(t.muted).child(this.data.status || "Your scheduled selection"),
       div().text_color(t.dim).child(`Next digest: ${this.data.next || "09:00 / 18:00 · local time"}`),
       ...(this.data.sources || ["X · followed accounts · awaiting setup"]).map(s => div().text_size(12).text_color(t.muted).child(s)),
+      ...(this.progress.helper ? [this.button("Inspect Sonnet helper", "peek", cx)] : []),
+      ...(this.progress.phase && this.progress.phase !== "Ready" ? [div().text_color(t.muted).child(this.progress.phase)] : []),
       ...(this.error ? [div().text_color(t.blocked).child(this.error)] : []),
       ...(this.finished ? [div().text_size(22).child("You’re caught up."), div().text_color(t.muted).child("Close this panel. The next digest will arrive on schedule.")] : this.data.items.map((item, i) =>
         v_flex().flex_shrink_0().p(18).gap(10).rounded(10).bg(t.surface).children([

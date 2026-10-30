@@ -15,63 +15,90 @@ class DigestTests(unittest.TestCase):
         self.data = self.root / 'data'
         token = self.root / 'token'
         token.write_text('test-token')
-        collect.save(self.config, {'x_token_file': str(token), 'x_oauth_file':str(self.root / 'oauth.json'), 'llm_command': ['test-selector']})
-        self.posts = [{'id': '123', 'author': 'alice', 'text': 'A useful release'}]
-        self.selection = [{'id': '123', 'title': 'Release', 'summary': 'A useful release', 'why': 'New capability'}]
+        collect.save(self.config, {'x_token_file':str(token), 'x_oauth_file':str(self.root/'oauth.json')})
+        self.posts = [{'id':'123','author':'alice','text':'A useful release'}]
+        self.result = {'sources':{k:{'status':'ok','count':0,'sampled':False,'error':''} for k in ('Slack','Email')}, 'candidates':[],
+                       'items':[{'id':'x:123','title':'Release','summary':'A useful release','why':'New capability'}]}
 
-    def run_worker(self, selected=None):
-        with patch.object(collect, 'collect', return_value=(self.posts, False)), patch.object(collect.subprocess, 'run') as llm:
-            llm.return_value.returncode = 0
-            llm.return_value.stdout = json.dumps(self.selection if selected is None else selected)
-            return collect.run(self.config, self.data)
+    def run_worker(self):
+        with patch.object(collect, 'collect', return_value=(self.posts,False)), patch('helper.run_job',return_value=self.result):
+            return collect.run(self.config,self.data)
 
-    def test_publishes_verified_links_and_cursor(self):
-        self.assertEqual(self.run_worker(), 0)
-        digest = collect.read(self.data / 'latest.json', {})
-        self.assertEqual(digest['cursor'], '123')
-        self.assertEqual(digest['items'][0]['url'], 'https://x.com/i/status/123')
-        self.assertEqual(digest['items'][0]['summary'], 'A useful release')
+    def test_publishes_verified_links_and_independent_watermarks(self):
+        self.assertEqual(self.run_worker(),0)
+        digest=collect.read(self.data/'latest.json',{})
+        self.assertEqual(digest['cursor'],'123')
+        self.assertEqual(digest['items'][0]['url'],'https://x.com/i/status/123')
+        self.assertEqual(set(digest['watermarks']),{'Slack','Email'})
 
-    def test_failed_selection_preserves_previous_digest(self):
+    def test_failed_selection_preserves_previous_digest_and_cached_x(self):
         self.run_worker()
-        previous = (self.data / 'latest.json').read_bytes()
-        self.assertEqual(self.run_worker([dict(self.selection[0], id='999')]), 1)
-        self.assertEqual((self.data / 'latest.json').read_bytes(), previous)
-        self.assertTrue(collect.read(self.data / 'status.json', {})['error'])
+        previous=(self.data/'latest.json').read_bytes()
+        self.result['items'][0]['id']='unknown'
+        self.assertEqual(self.run_worker(),1)
+        self.assertEqual((self.data/'latest.json').read_bytes(),previous)
+        self.result['items'][0]['id']='x:123'
+        with patch.object(collect,'collect',side_effect=AssertionError('paid refetch')), patch('helper.run_job',return_value=self.result):
+            self.assertEqual(collect.run(self.config,self.data),0)
 
-    def test_selection_retry_reuses_pending_posts(self):
-        self.assertEqual(self.run_worker([dict(self.selection[0], id='999')]), 1)
-        with patch.object(collect, 'collect', side_effect=AssertionError('paid refetch')), patch.object(collect.subprocess, 'run') as llm:
-            llm.return_value.returncode = 0
-            llm.return_value.stdout = json.dumps(self.selection)
-            self.assertEqual(collect.run(self.config, self.data), 0)
-        self.assertFalse((self.data / 'pending.json').exists())
-
-    def test_accepts_claude_structured_output(self):
-        self.assertEqual(self.run_worker({'is_error':False, 'structured_output':{'items':self.selection}}), 0)
-        self.assertEqual(collect.read(self.data / 'latest.json', {})['items'][0]['id'], '123')
-
-    def test_zero_selected_is_valid_and_marks_posts_processed(self):
-        self.assertEqual(self.run_worker([]), 0)
-        digest = collect.read(self.data / 'latest.json', {})
-        self.assertEqual(digest['items'], [])
-        self.assertEqual(digest['cursor'], '123')
-
-    def test_empty_first_collection_keeps_cursor_absent(self):
-        self.posts = []
-        self.assertEqual(self.run_worker(), 0)
-        previous = collect.read(self.data / 'latest.json', {})
-        self.assertIsNone(previous['cursor'])
-        with patch.object(collect, 'request', side_effect=[{'data': {'id':'42'}}, {}]) as api:
-            self.assertEqual(collect.collect('test', previous), ([], False))
-        params = api.call_args.args[2]
-        self.assertIn('start_time', params)
-        self.assertNotIn('since_id', params)
-
-    def test_processed_slot_does_not_fetch_again(self):
+    def test_source_failure_is_visible_without_advancing_its_watermark(self):
         self.run_worker()
-        with patch.object(collect, 'collect', side_effect=AssertionError('unexpected fetch')):
-            self.assertIsNone(collect.run(self.config, self.data, due=True))
+        previous=collect.read(self.data/'latest.json',{})['watermarks']['Slack']
+        self.result['sources']['Slack']={'status':'error','count':0,'sampled':False,'error':'Slack unavailable'}
+        self.assertEqual(self.run_worker(),0)
+        digest=collect.read(self.data/'latest.json',{})
+        self.assertEqual(digest['watermarks']['Slack'],previous)
+        self.assertIn('Slack unavailable',collect.read(self.data/'status.json',{})['error'])
+        self.assertIn('Slack · failed',digest['sources'])
+
+    def test_initial_source_failure_keeps_original_boundary_days_later(self):
+        self.result['sources']['Slack']={'status':'error','count':0,'sampled':False,'error':'Unavailable'}
+        real_datetime=dt.datetime
+        class Clock(real_datetime):
+            day=30
+            @classmethod
+            def now(cls,tz=None):
+                value=real_datetime(2026,10,30,18,tzinfo=dt.timezone.utc)+dt.timedelta(days=cls.day-30)
+                return value if tz else value.replace(tzinfo=None)
+        payloads=[]
+        def gather(payload,*args):
+            payloads.append(payload)
+            return self.result
+        with patch.object(collect.dt,'datetime',Clock),patch.object(collect,'collect',return_value=(self.posts,False)),patch('helper.run_job',side_effect=gather):
+            self.assertEqual(collect.run(self.config,self.data),0)
+            Clock.day=32
+            self.assertEqual(collect.run(self.config,self.data),0)
+        self.assertEqual(payloads[0]['windows']['Slack']['since'],'2026-10-29T18:00:00+00:00')
+        self.assertEqual(payloads[1]['windows']['Slack']['since'],payloads[0]['windows']['Slack']['since'])
+        self.assertNotEqual(payloads[1]['windows']['Slack']['until'],payloads[0]['windows']['Slack']['until'])
+
+    def test_expanding_slack_scope_starts_a_new_collection_window(self):
+        self.run_worker()
+        settings=collect.read(self.config,{})
+        settings['slack_include_private']=True
+        collect.save(self.config,settings)
+        payloads=[]
+        def gather(payload,*args):
+            payloads.append(payload)
+            return self.result
+        with patch.object(collect,'collect',return_value=(self.posts,False)),patch('helper.run_job',side_effect=gather):
+            self.assertEqual(collect.run(self.config,self.data),0)
+        latest=collect.read(self.data/'latest.json',{})
+        self.assertEqual(latest['slack_scope'],'all')
+        self.assertIn('explicitly authorized private channels and DMs',payloads[0]['instructions'])
+        self.assertLess(payloads[0]['windows']['Slack']['since'],latest['watermarks']['Slack'])
+
+    def test_processed_slot_does_not_launch_a_helper(self):
+        self.run_worker()
+        with patch('helper.run_job',side_effect=AssertionError('duplicate helper')):
+            self.assertIsNone(collect.run(self.config,self.data,due=True))
+
+    def test_x_failure_still_allows_mcp_digest(self):
+        self.result['items']=[]
+        with patch.object(collect,'collect',side_effect=ValueError('X unavailable')), patch('helper.run_job',return_value=self.result):
+            self.assertEqual(collect.run(self.config,self.data),0)
+        self.assertIn('X collection failed',collect.read(self.data/'status.json',{})['error'])
+        self.assertIsNone(collect.read(self.data/'latest.json',{})['cursor'])
 
     def test_paginated_timeline_includes_all_posts(self):
         responses = [{'data': {'id': '42'}},
@@ -93,10 +120,5 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(slot, dt.datetime(2026,10,29,18))
         self.assertEqual(following, dt.datetime(2026,10,30,9))
 
-    def test_invalid_duplicate_and_oversize_selections_rejected(self):
-        for selection in [self.selection*2, self.selection*6, [dict(self.selection[0], summary='')]]:
-            with self.assertRaises(ValueError):
-                collect.validate(selection, self.posts)
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == '__main__': unittest.main()
