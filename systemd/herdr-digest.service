@@ -5,6 +5,6 @@ Description=Gather a finite digest from X, Slack and email
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/.config/herdr-digest
-ExecStart=%h/.config/herdr-app/mods/digest/collect.py --due
+ExecStart=%h/.local/bin/herdr-digest collect --due
 TimeoutStartSec=30min
 UMask=0077

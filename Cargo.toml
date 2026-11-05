@@ -1,0 +1,22 @@
+[package]
+name = "herdr-digest"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+description = "Enough Internet for Today: a finite X, Slack and email digest for a herdr-app panel"
+
+[dependencies]
+anyhow = "1.0.104"
+base64 = "0.23.1"
+clap = { version = "4.6.7", features = ["derive"] }
+getrandom = "0.4.3"
+jiff = "0.2.39"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
+shlex = "2.0.1"
+tempfile = "3.27.0"
+ureq = "3.5.1"
+url = "2.5.8"
+

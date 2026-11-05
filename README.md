@@ -4,9 +4,9 @@ A finite Herdr digest from followed X accounts, public Slack channels you belong
 
 ## Install
 
-Requirements: Linux with user systemd, `python3`, `herdr-app`, `hc`, and a logged-in `claude` CLI with Gmail and Slack MCP connections. Check connections with `claude mcp list`.
+Requirements: Linux with user systemd, Rust's `cargo` (1.89 or later), `herdr-app`, `hc`, and a logged-in `claude` CLI with Gmail and Slack MCP connections. Check connections with `claude mcp list`.
 
-Run `./install.sh`. It installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
+Run `./install.sh`. It builds the `herdr-digest` collector and installs it in `~/.local/bin`, installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
 
 ## Source setup
 
@@ -15,17 +15,17 @@ Local settings live in `~/.config/herdr-digest/config.json`; `config.example.jso
 For X, create an OAuth 2.0 Native App with callback URL `http://127.0.0.1:8765/callback`. Use this repository as its website URL. Store its OAuth Client ID as `ENOUGH_INTERNET_FOR_TODAY_X_COM_CLIENT_ID` in `~/.secrets` (shell-style `NAME=value`, optional `export`; shell code is never evaluated).
 
 ```
-python3 ~/.config/herdr-app/mods/digest/x_auth.py --authorize --public-client
+herdr-digest authorize --public-client
 ```
 
 The helper requests `tweet.read`, `users.read`, and `offline.access`. It saves tokens with mode 0600 in `~/.config/herdr-digest/x-oauth.json` and refreshes them automatically. Never commit that file, `~/.secrets`, collected messages, or job files. For a confidential Web/Automated app, also set `ENOUGH_INTERNET_FOR_TODAY_X_COM_SECRET` to its OAuth 2.0 Client Secret and omit `--public-client`. A raw user token in `~/.config/herdr-digest/x-token` is supported as a fallback without automatic refresh. X endpoint access and credits are required.
 
-Slack uses only public channels you belong to by default. Email uses recent Gmail inbox threads, excluding spam and trash. Both are read-only: no sends, edits, archive, delete, or mark-read tools are authorized. Private channels and DMs require explicit consent: set `slack_include_private` to true and run `python3 ~/.config/herdr-app/mods/digest/helper.py --configure --include-private-slack`. Restart an existing idle helper with `hc kill enough-internet` so its next launch picks up that permission change. `install.sh` preserves the configured Slack scope; new installations default to public-only Slack.
+Slack uses only public channels you belong to by default. Email uses recent Gmail inbox threads, excluding spam and trash. Both are read-only: no sends, edits, archive, delete, or mark-read tools are authorized. Private channels and DMs require explicit consent: set `slack_include_private` to true and run `herdr-digest configure --include-private-slack`. Restart an existing idle helper with `hc kill enough-internet` so its next launch picks up that permission change. `install.sh` preserves the configured Slack scope; new installations default to public-only Slack.
 
 ## Collection and reading
 
 ```
-~/.config/herdr-app/mods/digest/collect.py
+herdr-digest collect
 systemctl --user enable --now herdr-digest.timer
 herdr-app do tab.new --name 'Enough Internet' --mod digest
 ```
@@ -45,8 +45,10 @@ The collector validates selection IDs, field sizes, time windows, source counts,
 ## Checks
 
 ```
-python3 -m unittest discover -s mods/digest -p 'test_*.py'
+cargo test
 ```
+
+`tests/collect.rs` runs `herdr-digest collect` with a stand-in `hc` (`tests/fake-hc`), whose helper writes a set result.
 
 The panel is checked with the `herdr-mod-vision` skill in [herdr-common](https://github.com/flupke/herdr-common)'s app sandbox: a private herdr-app, at the release herdr-common's flake pins, on a headless display, so the check never touches your window or `~/.config/herdr-app`. Check herdr-common out beside this repository; it serves checks only, and nothing the digest installs or runs refers to it. Run it from the repository's root; `N` names the sandbox after the checkout, since other agents run sandboxes on the same machine:
 
@@ -68,6 +70,12 @@ $S shot $N "$out/finished.png"     # "You’re caught up."
 $S stop $N
 ```
 
-`tests/fixtures/latest.json` is a digest file in the shape `collect.py` writes, which the panel reads as it reads a collected one. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` and `digest.empty` replace its content, `digest.failure` adds a sample collection error, and all three are ignored outside demo mode. `digest.finish`, `digest.peek` and `digest.open:0` use the same action methods as clicks. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.
+`tests/panel` checks the same in a test of its own: it runs `herdr-digest collect` with the stand-in `hc` into a sandbox's app home, then the panel shows the collected digest, opens its original link and finishes. It is a workspace of its own, which takes herdr-common's `app-sandbox` crate by path, so the collector's build never reads `../herdr-common`. Run it in herdr-common's dev shell; `DIGEST_SHOTS=<directory>` keeps its screenshots:
+
+```
+../herdr-common/scripts/dev-shell cargo test --manifest-path tests/panel/Cargo.toml
+```
+
+`tests/fixtures/latest.json` is a digest file in the shape `herdr-digest collect` writes (`src/collect.rs`, whose tests check the fixture's keys), which the panel reads as it reads a collected one. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` and `digest.empty` replace its content, `digest.failure` adds a sample collection error, and all three are ignored outside demo mode. `digest.finish`, `digest.peek` and `digest.open:0` use the same action methods as clicks. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.
 
 References: [X timeline](https://docs.x.com/x-api/users/get-timeline), [X OAuth](https://docs.x.com/fundamentals/authentication/oauth-2-0/user-access-token), [Claude MCP](https://code.claude.com/docs/en/mcp), [Claude permissions](https://code.claude.com/docs/en/permissions).

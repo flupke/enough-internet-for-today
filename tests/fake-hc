@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$FAKE_HC_LOG"
+case "$1" in
+  get) exit 3 ;;
+  run) [ -n "$FAKE_HC_FAIL" ] && exit 1; echo '{"address":"t7","first_message":{"sent":true}}' ;;
+  wait)
+    for job in "$HOME"/.config/herdr-digest/helper/jobs/*/; do
+      [ -e "$job/result.json" ] || cp "$FAKE_RESULT" "$job/result.json"
+    done
+    echo '{"ended":true,"status":"done","reason":"status"}' ;;
+  *) exit 1 ;;
+esac

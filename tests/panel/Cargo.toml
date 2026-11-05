@@ -1,0 +1,17 @@
+# The digest panel's test, in herdr-common's app sandbox: a workspace of its own, so the
+# collector's build never reads ../herdr-common, which serves checks only. Run it in
+# herdr-common's dev shell, from the repository's root:
+#   ../herdr-common/scripts/dev-shell cargo test --manifest-path tests/panel/Cargo.toml
+[package]
+name = "digest-panel-tests"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dev-dependencies]
+app-sandbox = { path = "../../../herdr-common/crates/app-sandbox" }
+jiff = "0.2"
+serde_json = { version = "1", features = ["preserve_order"] }
+tempfile = "3"
