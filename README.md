@@ -4,9 +4,9 @@ A finite Herdr digest from followed X accounts, public Slack channels you belong
 
 ## Install
 
-Requirements: Linux with user systemd, Rust's `cargo` (1.89 or later), `herdr-app`, `hc`, and a logged-in `claude` CLI with Gmail and Slack MCP connections. Check connections with `claude mcp list`.
+Requirements: Linux with user systemd, `make`, Rust's `cargo` (1.89 or later), `herdr-app`, `hc`, and a logged-in `claude` CLI with Gmail and Slack MCP connections. Check connections with `claude mcp list`.
 
-Run `./install.sh`. It builds the `herdr-digest` collector and installs it in `~/.local/bin`, installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
+Run `make install`. It builds the `herdr-digest` collector and installs it in `~/.local/bin`, installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. Run it again to update: it asks nothing and keeps your configuration. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
 
 ## Source setup
 
@@ -20,7 +20,7 @@ herdr-digest authorize --public-client
 
 The helper requests `tweet.read`, `users.read`, and `offline.access`. It saves tokens with mode 0600 in `~/.config/herdr-digest/x-oauth.json` and refreshes them automatically. Never commit that file, `~/.secrets`, collected messages, or job files. For a confidential Web/Automated app, also set `ENOUGH_INTERNET_FOR_TODAY_X_COM_SECRET` to its OAuth 2.0 Client Secret and omit `--public-client`. A raw user token in `~/.config/herdr-digest/x-token` is supported as a fallback without automatic refresh. X endpoint access and credits are required.
 
-Slack uses only public channels you belong to by default. Email uses recent Gmail inbox threads, excluding spam and trash. Both are read-only: no sends, edits, archive, delete, or mark-read tools are authorized. Private channels and DMs require explicit consent: set `slack_include_private` to true and run `herdr-digest configure --include-private-slack`. Restart an existing idle helper with `hc kill enough-internet` so its next launch picks up that permission change. `install.sh` preserves the configured Slack scope; new installations default to public-only Slack.
+Slack uses only public channels you belong to by default. Email uses recent Gmail inbox threads, excluding spam and trash. Both are read-only: no sends, edits, archive, delete, or mark-read tools are authorized. Private channels and DMs require explicit consent: set `slack_include_private` to true and run `herdr-digest configure --include-private-slack`. Restart an existing idle helper with `hc kill enough-internet` so its next launch picks up that permission change. `make install` preserves the configured Slack scope; new installations default to public-only Slack.
 
 ## Collection and reading
 
@@ -44,8 +44,13 @@ The collector validates selection IDs, field sizes, time windows, source counts,
 
 ## Checks
 
+The checks run in this repository's Nix dev shell, which pins the Rust toolchain, `cargo-nextest`, `typos`, `cccc`, and the herdr-app and `hc` releases the panel test runs. `scripts/check` keeps each check's whole output under `target/checks/`:
+
 ```
-cargo test
+scripts/dev-shell scripts/check lint         # clippy -Dwarnings, complexity, typos
+scripts/dev-shell scripts/check test         # the collector's tests
+scripts/dev-shell scripts/check test-panel   # the panel test, below
+scripts/dev-shell scripts/check check        # all three
 ```
 
 `tests/collect.rs` runs `herdr-digest collect` with a stand-in `hc` (`tests/fake-hc`), whose helper writes a set result.
@@ -70,10 +75,12 @@ $S shot $N "$out/finished.png"     # "You’re caught up."
 $S stop $N
 ```
 
-`tests/panel` checks the same in a test of its own: it runs `herdr-digest collect` with the stand-in `hc` into a sandbox's app home, then the panel shows the collected digest, opens its original link and finishes. It is a workspace of its own, which takes herdr-common's `app-sandbox` crate by path, so the collector's build never reads `../herdr-common`. Run it in herdr-common's dev shell; `DIGEST_SHOTS=<directory>` keeps its screenshots:
+`tests/panel` checks the same in a test of its own: it runs `herdr-digest collect` with the stand-in `hc` into a sandbox's app home, then the panel shows the collected digest, opens its original link and finishes. It is a workspace of its own, which takes herdr-common's `app-sandbox` crate by path, so the collector's build never reads `../herdr-common`. Run it with `make test-panel` in the dev shell; `DIGEST_SHOTS=<directory>` keeps its screenshots:
 
 ```
-../herdr-common/scripts/dev-shell cargo test --manifest-path tests/panel/Cargo.toml
+shots=$(mktemp -d)
+DIGEST_SHOTS=$shots scripts/dev-shell scripts/check test-panel
+ls "$shots"                        # digest.png, finished.png
 ```
 
 `tests/fixtures/latest.json` is a digest file in the shape `herdr-digest collect` writes (`src/collect.rs`, whose tests check the fixture's keys), which the panel reads as it reads a collected one. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` and `digest.empty` replace its content, `digest.failure` adds a sample collection error, and all three are ignored outside demo mode. `digest.finish`, `digest.peek` and `digest.open:0` use the same action methods as clicks. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.

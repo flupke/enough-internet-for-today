@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
+# The digest's install, which `make install` runs: README's Install, and
+# .agents/wiki/install.md for what it changes. Non-interactive, and safe to run again.
 set -euo pipefail
-project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# A jj workspace other than the default one (.jj/repo is a file there) holds a change under
+# way, often a task's: installing from it would put that change in the user's live config.
+if [[ -f $project_dir/.jj/repo && -z ${INSTALL_FROM_WORKSPACE:-} ]]; then
+  echo "Refused: this is a jj workspace, not the default one. Install from the default" \
+    "workspace, or set INSTALL_FROM_WORKSPACE=1 to install into a temporary HOME." >&2
+  exit 1
+fi
+# A build in the dev shell links the Nix store's glibc, which Nix's garbage collector may
+# delete under the installed binary (ADR 0001).
+if [[ -n ${IN_NIX_SHELL:-} ]]; then
+  echo "Refused: run make install outside the dev shell, so the installed herdr-digest" \
+    "links the system's libraries, not the Nix store's." >&2
+  exit 1
+fi
 app_dir=$HOME/.config/herdr-app
 config_dir=$HOME/.config/herdr-digest
 bin_dir=$HOME/.local/bin

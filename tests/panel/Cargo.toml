@@ -1,7 +1,7 @@
 # The digest panel's test, in herdr-common's app sandbox: a workspace of its own, so the
-# collector's build never reads ../herdr-common, which serves checks only. Run it in
-# herdr-common's dev shell, from the repository's root:
-#   ../herdr-common/scripts/dev-shell cargo test --manifest-path tests/panel/Cargo.toml
+# collector's build never reads ../herdr-common, which serves checks only. Run it in the
+# repository's dev shell, from its root:
+#   scripts/dev-shell scripts/check test-panel
 [package]
 name = "digest-panel-tests"
 version = "0.0.0"

@@ -1,0 +1,7 @@
+{
+  "src/collect.rs collect": { "cognitive": 20, "cyclomatic": 16 },
+  "src/helper.rs run_job": { "cognitive": 33, "cyclomatic": 20 },
+  "src/main.rs main": { "cognitive": 11, "cyclomatic": 12 },
+  "src/sources.rs check_link": { "cognitive": 8, "cyclomatic": 11 },
+  "src/sources.rs checked_result": { "cognitive": 30, "cyclomatic": 23 }
+}

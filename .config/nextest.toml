@@ -1,0 +1,17 @@
+# Print failures and the summary only: PASS lines bury what went wrong.
+#
+# The summary also names each test slower than 10 s, with its time, and every
+# test's time is kept in target/nextest/default/junit.xml.
+[profile.default]
+status-level = "fail"
+# Report every failing test, not the first: a gate that stops early hides the others, and
+# agents then ran nextest by hand to see them.
+fail-fast = false
+final-status-level = "slow"
+# A test waits on events, never on the clock (.agents/wiki/unit-tests.md), so one still
+# running after two minutes is stuck: nextest ends it and reports it as failed, instead of
+# leaving the whole run waiting. This is every test's hang guard.
+slow-timeout = { period = "10s", terminate-after = 12 }
+
+[profile.default.junit]
+path = "junit.xml"

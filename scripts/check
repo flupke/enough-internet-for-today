@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Runs `make <target> [variable=value...]`, keeps its whole output in target/checks/<target>.log,
+# and prints only its last lines and a status line, the last one: `make lint: ok`, or
+# `make lint: FAILED (exit 2), full log: target/checks/lint.log`. It exits with make's status.
+#
+# Piping make into `tail` loses its exit status (zsh's `$pipestatus` is not bash's
+# `$PIPESTATUS`), so a check had to run twice to be read. This prints both at once.
+#
+# Usage: scripts/check <target> [variable=value...]   (in the dev shell: scripts/dev-shell)
+set -uo pipefail
+target="${1:?usage: scripts/check <target> [variable=value...]}"
+root="$(cd "$(dirname "$0")/.." && pwd)"
+# Under this workspace's own target/, even when CARGO_TARGET_DIR shares a build cache with
+# other workspaces: their gates would write the same log.
+logs="$root/target/checks"
+mkdir -p "$logs"
+log="$logs/$target.log"
+
+make --no-print-directory -C "$root" "$@" >"$log" 2>&1
+status=$?
+tail -n "${CHECK_TAIL:-40}" "$log"
+if [ "$status" -eq 0 ]; then
+  echo "make $target: ok"
+else
+  echo "make $target: FAILED (exit $status), full log: $log"
+fi
+exit "$status"

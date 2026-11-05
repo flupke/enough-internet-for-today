@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Runs a command, or an interactive shell, in this repository's Nix dev shell, from the main
+# checkout or from a jj workspace. Nix evaluates a copy of flake.nix and flake.lock alone
+# (.agents/wiki/checks.md, The dev shell). Nix makes the copy itself, in its store, and its
+# garbage collector removes it: the script makes no temporary directory and deletes nothing.
+#
+# Usage: scripts/dev-shell [command [argument...]]
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC2016 # Nix expands the expression, not the shell.
+flake="$(DEV_SHELL_ROOT="$root" nix eval --raw --impure --expr '
+  builtins.path {
+    path = /. + builtins.getEnv "DEV_SHELL_ROOT";
+    name = "dev-shell-flake";
+    filter = path: type: builtins.elem (baseNameOf path) [ "flake.nix" "flake.lock" ];
+  }
+')"
+# The store copy is read-only, so Nix never writes a lock update back: run `nix flake lock` in
+# the checkout to change flake.lock.
+if [ "$#" -eq 0 ]; then
+  exec nix develop --no-write-lock-file "path:$flake"
+fi
+exec nix develop --no-write-lock-file "path:$flake" --command "$@"

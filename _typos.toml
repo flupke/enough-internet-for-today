@@ -1,0 +1,4 @@
+# typos, run by `make lint`. Words it would correct that are right here.
+[default.extend-words]
+# The helper's ownership label: eit.owner, for Enough Internet for Today.
+eit = "eit"
