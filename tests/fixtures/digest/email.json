@@ -1,0 +1,21 @@
+{
+  "next": "Fri 08:00",
+  "cursor": "2026-11-05T08:00:05.402311+00:00",
+  "items": [
+    {
+      "id": "email:fixture-thread-1",
+      "title": "Fixture: a decision waiting in your inbox",
+      "summary": "An email asks for your choice between two dates for the offsite, before tomorrow noon.",
+      "why": "A concrete next action with a deadline.",
+      "source": "Email · Claire Martin",
+      "url": "https://mail.google.com/mail/u/0/#inbox/fixture-thread-1",
+      "at": "2026-11-05T08:00:05.402311+00:00"
+    }
+  ],
+  "coverage": "12 inspected",
+  "slot": "2026-11-05T08:00:00",
+  "refreshed": "Thu 08:00",
+  "checked_at": "2026-11-05T08:00:05.402311+00:00",
+  "checked": "Thu 08:00",
+  "error": ""
+}

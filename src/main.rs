@@ -1,14 +1,16 @@
-//! Enough Internet for Today: a finite digest from X, Slack and email, which the herdr-app
-//! `digest` mod shows.
+//! Enough Internet for Today: a finite digest in three zones, Slack, Email and Social, which the
+//! herdr-app `digest` mod shows.
 
 mod collect;
 mod error;
 mod files;
 mod helper;
+mod legacy;
 mod schedule;
 mod sources;
 mod x;
 mod x_auth;
+mod zone;
 
 /// Taken for writing by a unit test that spawns a process, and for reading by those that take
 /// the worker lock: a process spawned from the test binary holds copies of its open files, locks
@@ -24,7 +26,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "herdr-digest",
-    about = "Enough Internet for Today: a finite X, Slack and email digest"
+    about = "Enough Internet for Today: a finite digest of Slack, email and social media"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -33,11 +35,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Collect a digest; the timer runs it with --due.
+    /// Collect the zones; the timer runs it with --due, the panel's Refresh with --zone.
     Collect {
-        /// Only collect if a scheduled slot is due.
+        /// Only collect the zones whose scheduled slot is due.
         #[arg(long)]
         due: bool,
+        /// The zones to collect, all of them by default.
+        #[arg(long, value_enum)]
+        zone: Vec<zone::Zone>,
         #[arg(long)]
         config: Option<PathBuf>,
         #[arg(long)]
@@ -74,20 +79,38 @@ fn default_data() -> PathBuf {
         .join("data/digest")
 }
 
+/// `herdr-digest collect`: every zone unless `zones` names some.
+fn collect(
+    due: bool,
+    zones: Vec<zone::Zone>,
+    config: Option<PathBuf>,
+    data: Option<PathBuf>,
+) -> ExitCode {
+    let config = config.unwrap_or_else(default_config);
+    let data = data.unwrap_or_else(default_data);
+    let zones = if zones.is_empty() {
+        zone::Zone::ALL.to_vec()
+    } else {
+        zones
+    };
+    match collect::run(&config, &data, &zones, due, &mut collect::Live) {
+        Ok(collect::Run::Failed) => ExitCode::FAILURE,
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Commands::Collect { due, config, data } => {
-            let config = config.unwrap_or_else(default_config);
-            let data = data.unwrap_or_else(default_data);
-            match collect::run(&config, &data, due, &mut collect::Live) {
-                Ok(collect::Run::Failed) => ExitCode::FAILURE,
-                Ok(_) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("{e:#}");
-                    ExitCode::FAILURE
-                }
-            }
-        }
+        Commands::Collect {
+            due,
+            zone,
+            config,
+            data,
+        } => collect(due, zone, config, data),
         Commands::Configure {
             include_private_slack,
             config,

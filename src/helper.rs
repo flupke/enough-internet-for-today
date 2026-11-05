@@ -348,7 +348,7 @@ pub fn run_job(
         if Instant::now() >= deadline {
             hc.call(&["interrupt", &address], minute, false)?;
             return Err(shown!(
-                "Helper timed out; the previous digest and pending X batch are preserved"
+                "Helper timed out; the previous selection and pending X batch are kept"
             ));
         }
     }

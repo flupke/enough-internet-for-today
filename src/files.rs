@@ -55,6 +55,14 @@ pub fn save(path: &Path, value: &Value) -> Result<()> {
     Ok(())
 }
 
+/// Remove `path`, unless it is already gone.
+pub fn remove(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+        _ => Ok(()),
+    }
+}
+
 /// Python's truthiness of a JSON value, as `bool(value)` reads it.
 pub fn truthy(value: Option<&Value>) -> bool {
     match value {

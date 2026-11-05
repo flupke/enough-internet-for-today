@@ -1,6 +1,7 @@
-//! The panel shows the digest the collector writes: `herdr-digest collect`, with a stand-in
-//! `hc` whose helper selects one Slack message, writes into the app sandbox's home, and the
-//! `digest` mod there reads it, opens its original link and finishes.
+//! The panel shows the zones the collector writes: `herdr-digest collect`, with a stand-in
+//! `hc` whose helper selects one Slack message and finds no new email, and X unreachable,
+//! writes into the app sandbox's home, and the `digest` mod there shows each zone, opens the
+//! Slack message's original link and finishes.
 //!
 //! With `DIGEST_SHOTS` naming a directory, the test saves the panel's screenshots there:
 //! `digest.png`, then `finished.png`.
@@ -38,7 +39,8 @@ fn collector() -> PathBuf {
     target.join("debug/herdr-digest")
 }
 
-/// Run the collector into `data`, its helper selecting one Slack message, and X unreachable.
+/// Run the collector into `data`, its helper selecting one Slack message and finding no new
+/// email, and X unreachable.
 fn collect(data: &Path) {
     let home = tempfile::tempdir().unwrap();
     let root = home.path();
@@ -49,15 +51,21 @@ fn collect(data: &Path) {
     std::fs::create_dir_all(root.join(".config/herdr-digest")).unwrap();
     std::fs::write(root.join(".config/herdr-digest/config.json"), "{}").unwrap();
     let at = Timestamp::now() - SignedDuration::from_hours(1);
-    let result = json!({
-        "sources": {"Slack": {"status": "ok", "count": 3, "sampled": false, "error": ""},
-                    "Email": {"status": "ok", "count": 0, "sampled": false, "error": ""}},
+    let results = root.join("results");
+    std::fs::create_dir(&results).unwrap();
+    let slack = json!({
+        "sources": {"Slack": {"status": "ok", "count": 3, "sampled": false, "error": ""}},
         "candidates": [{"id": "slack:C1:123", "kind": "Slack", "author": "Alice", "timestamp": at.to_string(),
                         "text": "We ship on Friday", "url": LINK}],
         "items": [{"id": "slack:C1:123", "title": "Friday release", "summary": "The team ships on Friday.",
                    "why": "A date to plan around."}],
     });
-    std::fs::write(root.join("result.json"), result.to_string()).unwrap();
+    let email = json!({
+        "sources": {"Email": {"status": "ok", "count": 0, "sampled": false, "error": ""}},
+        "candidates": [], "items": [],
+    });
+    std::fs::write(results.join("slack.json"), slack.to_string()).unwrap();
+    std::fs::write(results.join("email.json"), email.to_string()).unwrap();
     let path = format!(
         "{}:{}",
         bin.display(),
@@ -70,10 +78,14 @@ fn collect(data: &Path) {
         .env("HOME", root)
         .env("PATH", path)
         .env("FAKE_HC_LOG", root.join("hc.log"))
-        .env("FAKE_RESULT", root.join("result.json"))
+        .env("FAKE_RESULTS", &results)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "only Social fails: {output:?}"
+    );
 }
 
 /// `digest.debug` once the panel recorded `last`.
@@ -125,12 +137,9 @@ fn panel_shows_the_collected_digest() {
 
     let module = app_home.join("mods/digest");
     std::fs::create_dir_all(&module).unwrap();
-    for file in ["main.js", "mod.json"] {
-        std::fs::copy(
-            repository().join("mods/digest").join(file),
-            module.join(file),
-        )
-        .unwrap();
+    for file in std::fs::read_dir(repository().join("mods/digest")).unwrap() {
+        let file = file.unwrap().path();
+        std::fs::copy(&file, module.join(file.file_name().unwrap())).unwrap();
     }
     let inside = sandbox.inside().join(APP_HOME).join("mods/digest");
     sandbox
@@ -154,26 +163,27 @@ fn panel_shows_the_collected_digest() {
     sandbox.herdr_app(&["do", "app.zoom_out"]).unwrap();
 
     let shown = debug(&app_home, "load");
-    assert_eq!(shown["status"], "1 selected across X, Slack and email");
-    assert_eq!(shown["items"][0]["title"], "Friday release");
-    assert_eq!(shown["items"][0]["source"], "Slack · Alice");
-    assert!(
-        shown["sources"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("Slack · 3 inspected"))
-    );
+    let slack = &shown["zones"]["slack"];
     assert_eq!(
-        shown["error"],
+        slack["items"],
+        json!([{"title": "Friday release", "source": "Slack · Alice"}])
+    );
+    assert_eq!(slack["coverage"], "3 inspected");
+    assert_eq!(slack["error"], "");
+    assert_eq!(shown["zones"]["email"]["coverage"], "Nothing new");
+    assert_eq!(shown["zones"]["email"]["items"], json!([]));
+    assert_eq!(
+        shown["zones"]["social"]["error"],
         "X collection failed; check token access, credits and rate limits"
     );
+    assert_eq!(shown["unread"], 1);
     assert_eq!(
         shown["progress"],
-        json!({"phase": "Ready", "helper": "t7", "state": "idle"})
+        json!({"zone": null, "phase": "Ready", "helper": "t7", "state": "idle"})
     );
     let digest = shoot(&sandbox, None, "digest.png");
 
-    sandbox.herdr_app(&["do", "digest.open:0"]).unwrap();
+    sandbox.herdr_app(&["do", "digest.open:slack:0"]).unwrap();
     let deadline = Instant::now() + Duration::from_secs(30);
     let opened = sandbox.directory().join("opened.log");
     while !std::fs::read_to_string(&opened)
@@ -185,7 +195,9 @@ fn panel_shows_the_collected_digest() {
     }
 
     sandbox.herdr_app(&["do", "digest.finish"]).unwrap();
-    assert_eq!(debug(&app_home, "finish")["finished"], true);
+    let finished = debug(&app_home, "finish");
+    assert_eq!(finished["finished"], true);
+    assert_eq!(finished["zones"]["slack"]["items"], json!([]));
     shoot(&sandbox, Some(&digest), "finished.png");
     sandbox.stop().unwrap();
 }

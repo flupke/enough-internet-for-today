@@ -1,5 +1,5 @@
 [Unit]
-Description=Check whether a scheduled X digest is due
+Description=Check whether a digest zone is due
 
 [Timer]
 OnStartupSec=2min

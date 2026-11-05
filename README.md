@@ -1,16 +1,16 @@
 # Enough Internet for Today
 
-A finite Herdr digest from followed X accounts, public Slack channels you belong to, and your Gmail inbox. An interactive Claude Sonnet 5.5 helper at medium effort gathers Slack and email through your connected MCP servers, then selects at most five useful updates across all sources. Read the selection, follow an original link if needed, and choose Done for now.
+A finite Herdr digest in three zones: the Slack channels you belong to, your Gmail inbox, and social media (followed X accounts, for now). Each zone is collected on its own schedule: Slack every half hour, Email and Social every morning. An interactive Claude Sonnet 5.5 helper at medium effort gathers Slack and email through your connected MCP servers, then selects at most five useful items per collection. Read the selection, follow an original link if needed, and choose Done for now.
 
 ## Install
 
 Requirements: Linux with user systemd, `make`, Rust's `cargo` (1.89 or later), `herdr-app`, `hc`, and a logged-in `claude` CLI with Gmail and Slack MCP connections. Check connections with `claude mcp list`.
 
-Run `make install`. It builds the `herdr-digest` collector and installs it in `~/.local/bin`, installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. Run it again to update: it asks nothing and keeps your configuration. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
+Run `make install`. It builds the `herdr-digest` collector and installs it in `~/.local/bin`, installs the mod and timer, configures the `enough-internet` hc template, and preserves existing local configuration. Run it again to update: it asks nothing and keeps your configuration. The first collection after an update from the single-digest version moves that digest's cursors and items into the zones, so nothing is fetched twice. On first launch, the Claude workspace at `~/.config/herdr-digest/helper` may require a one-time trust decision; inspect it in Herdr or use `hc attach enough-internet`. After accepting, run collection again. A startup task that wasn't delivered is never blindly resent.
 
 ## Source setup
 
-Local settings live in `~/.config/herdr-digest/config.json`; `config.example.json` shows defaults. Set `interests` to the topics you want prioritized. Without a profile, the helper selects generally substantive updates and does not invent personal relevance. The old `llm_command` setting is no longer used.
+Local settings live in `~/.config/herdr-digest/config.json`; `config.example.json` shows defaults. `morning` sets the local time of the Email and Social collections, default 08:00; `slack_every_minutes` sets Slack's interval, default 30, a divisor of a day. The old `times` setting is no longer read. Set `interests` to the topics you want prioritized. Without a profile, the helper selects generally substantive updates and does not invent personal relevance. The old `llm_command` setting is no longer used.
 
 For X, create an OAuth 2.0 Native App with callback URL `http://127.0.0.1:8765/callback`. Use this repository as its website URL. Store its OAuth Client ID as `ENOUGH_INTERNET_FOR_TODAY_X_COM_CLIENT_ID` in `~/.secrets` (shell-style `NAME=value`, optional `export`; shell code is never evaluated).
 
@@ -30,11 +30,13 @@ systemctl --user enable --now herdr-digest.timer
 herdr-app do tab.new --name 'Enough Internet' --mod digest
 ```
 
-The timer checks every five minutes; `times` sets the daily local schedule, default 09:00 and 18:00. Missed slots produce one catch-up digest while the user service manager runs. It does not wake a sleeping machine. The panel reads local updates every 15 seconds. Collection works independently of the window.
+`herdr-digest collect` collects every zone; `--zone slack` (or `email`, `social`, repeatable) collects only those. The timer runs `herdr-digest collect --due` every five minutes, which collects each zone whose current slot has none yet: Slack every `slack_every_minutes` from midnight, Email and Social at `morning`. Missed slots produce one catch-up collection per zone while the user service manager runs; it does not wake a sleeping machine. A failed zone is retried at most every 30 minutes. Each zone's Refresh button in the panel runs `herdr-digest collect --zone <zone>` at once. The panel follows the collector's files as they change. Collection works independently of the window.
 
-X excludes replies/reposts and samples up to 300 new posts (configurable with `max_pages`, maximum 20). Initial collection covers the past 24 hours. If capped, older posts are explicitly labeled omitted; the X cursor advances. Selection failures retain a pending X batch so retries avoid another paid fetch.
+Each zone shows when it last refreshed and refreshes next, and its own failure: a failed zone keeps its previous selection and its cursor, and the others are unaffected. Slack keeps its selections of the last 24 hours, newest first; Email and Social show their latest selection. Done for now marks every item shown as read; a zone shows again once a collection selects something new.
 
-Slack and email each inspect at most 100 recent messages/threads per digest, newest first, since their last successful collection (first run: 24 hours). Coverage and failures are shown per source. A failed source retains its previous watermark; other successful sources may publish a digest. If all sources fail or the result is invalid, the previous digest stays in place.
+Every source collects strictly after its cursor, so nothing is fetched twice. Social asks X for the followed accounts' posts after the newest post ID it has seen (`since_id`), excluding replies and reposts, up to 300 posts per collection (configurable with `max_pages`, maximum 20); the very first collection covers the past 24 hours. A collection with no new post, scheduled or refreshed, costs that one X request and no helper turn, and keeps the selection. If capped, or if a later page fails, older posts are labeled omitted and the cursor still advances past them. A failed selection keeps the fetched posts as a pending X batch, so its retry does not pay X again. X's user ID is kept after the first collection.
+
+Slack and Email each inspect at most 100 messages/threads per collection, newest first, strictly after their cursor (first run: 24 hours). Their cursor moves only when the collection succeeds. A Slack collection with nothing new costs one turn of the running helper, one search, and keeps the selection as it was.
 
 ## Watch the helper
 
@@ -53,7 +55,7 @@ scripts/dev-shell scripts/check test-panel   # the panel test, below
 scripts/dev-shell scripts/check check        # all three
 ```
 
-`tests/collect.rs` runs `herdr-digest collect` with a stand-in `hc` (`tests/fake-hc`), whose helper writes a set result.
+`tests/collect.rs` runs `herdr-digest collect` with a stand-in `hc` (`tests/fake-hc`), whose helper writes a set result for each zone.
 
 The panel is checked with the `herdr-mod-vision` skill in [herdr-common](https://github.com/flupke/herdr-common)'s app sandbox: a private herdr-app, at the release herdr-common's flake pins, on a headless display, so the check never touches your window or `~/.config/herdr-app`. Check herdr-common out beside this repository; it serves checks only, and nothing the digest installs or runs refers to it. Run it from the repository's root; `N` names the sandbox after the checkout, since other agents run sandboxes on the same machine:
 
@@ -62,20 +64,20 @@ S=../herdr-common/skills/herdr-mod-vision/app-sandbox N=digest-$(basename "$PWD"
 $S start $N
 copy=$($S mod $N mods/digest) && $S herdr-app $N check "$copy"
 home=$($S info $N | $S tool jq -r .app_home)
-mkdir -p "$home/data/digest" && cp tests/fixtures/latest.json "$home/data/digest/latest.json"
+mkdir -p "$home/data/digest" && cp tests/fixtures/digest/*.json "$home/data/digest/"
 $S herdr-app $N do space.new --name vision
 $S herdr-app $N do tab.new --name digest --mod digest
 $S herdr-app $N do app.zoom_out    # fits "Done for now" in the 1400×900 window
 for _ in $(seq 30); do $S tool jq -e '."digest.debug".last == "load"' "$home/shared.json" >/dev/null 2>&1 && break; sleep 1; done
-$S tool jq '."digest.debug" | {error, status, titles: [.items[].title]}' "$home/shared.json"
-$S shot $N "$out/digest.png"       # both fixture items, then "Done for now"
+$S tool jq '."digest.debug" | {error, unread, zones: (.zones | map_values({error, titles: [.items[].title]}))}' "$home/shared.json"
+$S shot $N "$out/digest.png"       # the three zones' fixture items, then "Done for now"
 $S herdr-app $N do digest.finish
 for _ in $(seq 30); do $S tool jq -e '."digest.debug".last == "finish"' "$home/shared.json" >/dev/null 2>&1 && break; sleep 1; done
 $S shot $N "$out/finished.png"     # "You’re caught up."
 $S stop $N
 ```
 
-`tests/panel` checks the same in a test of its own: it runs `herdr-digest collect` with the stand-in `hc` into a sandbox's app home, then the panel shows the collected digest, opens its original link and finishes. It is a workspace of its own, which takes herdr-common's `app-sandbox` crate by path, so the collector's build never reads `../herdr-common`. Run it with `make test-panel` in the dev shell; `DIGEST_SHOTS=<directory>` keeps its screenshots:
+`tests/panel` checks the same in a test of its own: it runs `herdr-digest collect` with the stand-in `hc` into a sandbox's app home, then the panel shows each zone as collected, opens the Slack item's original link and finishes. It is a workspace of its own, which takes herdr-common's `app-sandbox` crate by path, so the collector's build never reads `../herdr-common`. Run it with `make test-panel` in the dev shell; `DIGEST_SHOTS=<directory>` keeps its screenshots:
 
 ```
 shots=$(mktemp -d)
@@ -83,6 +85,6 @@ DIGEST_SHOTS=$shots scripts/dev-shell scripts/check test-panel
 ls "$shots"                        # digest.png, finished.png
 ```
 
-`tests/fixtures/latest.json` is a digest file in the shape `herdr-digest collect` writes (`src/collect.rs`, whose tests check the fixture's keys), which the panel reads as it reads a collected one. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` and `digest.empty` replace its content, `digest.failure` adds a sample collection error, and all three are ignored outside demo mode. `digest.finish`, `digest.peek` and `digest.open:0` use the same action methods as clicks. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.
+`tests/fixtures/digest/` holds a zone file for each zone in the shape `herdr-digest collect` writes (`src/collect.rs`, whose tests check the fixtures' keys), which the panel reads as it reads collected ones; `tests/fixtures/legacy/latest.json` is the single digest file the collector wrote before the zones, which it moves into the zone files. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` fills every zone, `digest.empty` empties them, `digest.failure` makes Slack and Social fail, and all three are ignored outside demo mode. `digest.finish`, `digest.peek`, `digest.refresh:slack` and `digest.open:slack:0` use the same action methods as clicks; Refresh runs the installed collector. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.
 
 References: [X timeline](https://docs.x.com/x-api/users/get-timeline), [X OAuth](https://docs.x.com/fundamentals/authentication/oauth-2-0/user-access-token), [Claude MCP](https://code.claude.com/docs/en/mcp), [Claude permissions](https://code.claude.com/docs/en/permissions).

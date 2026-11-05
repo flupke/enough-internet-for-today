@@ -1,39 +1,56 @@
 # Enough Internet for Today
 
-A finite digest, read in a herdr-app panel, of what the user follows on X, the Slack channels
-they belong to, and their Gmail inbox: a few items, then done for now.
+A finite digest, read in a herdr-app panel, of the Slack channels the user belongs to, their
+Gmail inbox, and what they follow on social media: a few items per zone, then done for now.
 
 ## Language
 
+**Zone**:
+One of the panel's three parts, Slack, Email and Social, each with its sources, its schedule,
+its own collection, last collection time and failure. `data/digest/<zone>.json` in herdr-app's
+home holds its state and its selection. Slack keeps its selections of the last day; Email and
+Social keep their latest.
+_Avoid_: section, panel (the panel is the mod)
+
 **Digest**:
-One collection's result, at most five items across every source, with each source's coverage;
-`data/digest/latest.json` in herdr-app's home holds the last one.
+What the panel shows: every zone's selection, at most five items per collection.
 _Avoid_: feed, newsletter, report
 
+**Selection**:
+The items one collection chose, at most five; empty when nothing was worth it.
+
 **Item**:
-One entry of a digest: a title, a summary, why it matters, its source and its original link.
+One entry of a zone's selection: a title, a summary, why it matters, its source, its original
+link, and when it was selected.
 _Avoid_: card, post (a post is X's)
 
 **Source**:
-Where candidates come from: X, Slack or Email. Each has its own coverage line, failure and
-watermark.
+Where candidates come from: X (Social's, for now), Slack or Email.
 _Avoid_: channel (a channel is Slack's), provider
 
 **Candidate**:
 A post, message or thread a source gave for the helper to select from.
 
 **Collection**:
-One run of `herdr-digest collect`: gather the candidates, have the helper select the items,
-write the digest. A failed collection leaves the previous digest in place.
-_Avoid_: sync, fetch, refresh
+One zone's run of `herdr-digest collect`: gather the candidates newer than its cursor, have the
+helper select the items, update the zone. A failed collection leaves the zone's selection and
+cursor in place; one that finds nothing new keeps the selection and selects nothing.
+_Avoid_: sync, fetch
+
+**Refresh**:
+The panel's button on each zone, which runs that zone's collection at once; "refreshed" is when
+a zone's last collection succeeded.
 
 **Slot**:
-One of the daily times (`times` in the config, 09:00 and 18:00 by default). The timer runs a
-collection when the current slot has no digest yet.
+A time a zone is due: every morning (`morning`, 08:00 by default) for Email and Social, every
+`slack_every_minutes` (30 by default) for Slack. The timer collects each zone whose current slot
+has no collection yet, and retries a failed one at most every 30 minutes.
 
-**Watermark**:
-Per Slack and Email, the time up to which they were collected; the next collection starts from
-it. X's equivalent is its **cursor**, the newest post ID seen.
+**Cursor**:
+Per source, where its next collection starts, strictly after it: the newest X post ID seen, and
+for Slack and Email the time up to which they were collected. It moves only once the
+collection's selection is safely kept.
+_Avoid_: watermark
 
 **Pending batch**:
 The X posts a collection fetched but whose selection failed, kept so a retry does not pay X
@@ -45,10 +62,12 @@ email through the user's MCP servers and selects the items. It is read-only towa
 _Avoid_: agent, bot, LLM command
 
 **Job**:
-One request to the helper: an input file and a result file under the helper's `jobs` folder.
+One request to the helper, for one zone: an input file and a result file under the helper's
+`jobs` folder.
 
 **Panel**:
-The herdr-app `digest` mod, which shows the latest digest and ends on "Done for now".
+The herdr-app `digest` mod, which shows the zones' unread items and ends on "Done for now",
+which marks them read.
 _Avoid_: widget, UI
 
 **Demo mode**:

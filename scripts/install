@@ -23,7 +23,8 @@ bin_dir=$HOME/.local/bin
 cargo build --release --locked --manifest-path "$project_dir/Cargo.toml" --target-dir "$project_dir/target"
 mkdir -p "$app_dir/mods/digest" "$config_dir" "$HOME/.config/systemd/user" "$bin_dir"
 chmod 700 "$config_dir"
-for file in main.js mod.json config.example.json; do
+for file in main.js mod.json config.example.json "$project_dir"/mods/digest/*.svg; do
+  file=${file##*/}
   install -m 644 "$project_dir/mods/digest/$file" "$app_dir/mods/digest/$file"
 done
 # What the Python collector, which herdr-digest replaces, installed beside the mod.

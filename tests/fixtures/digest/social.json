@@ -1,0 +1,31 @@
+{
+  "next": "Fri 08:00",
+  "x_user": "1000000000000000042",
+  "cursor": "1986123456789012345",
+  "items": [
+    {
+      "id": "x:1986123456789012345",
+      "title": "Fixture: a release with a useful new capability",
+      "summary": "A followed developer announced a release and explained the practical change it brings, with a short migration note.",
+      "why": "A concrete update with enough detail to assess.",
+      "source": "X · fixture_dev",
+      "url": "https://x.com/i/status/1986123456789012345",
+      "at": "2026-11-05T08:00:12.402311+00:00"
+    },
+    {
+      "id": "x:1986123456789000001",
+      "title": "Fixture: a careful thread on a design tradeoff",
+      "summary": "A followed engineer weighs a queue against a log for event delivery, and says where each one breaks.",
+      "why": "Substantive context, without the surrounding argument.",
+      "source": "X · fixture_eng",
+      "url": "https://x.com/i/status/1986123456789000001",
+      "at": "2026-11-05T08:00:12.402311+00:00"
+    }
+  ],
+  "coverage": "42 new posts",
+  "slot": "2026-11-05T08:00:00",
+  "refreshed": "Thu 08:00",
+  "checked_at": "2026-11-05T08:00:12.402311+00:00",
+  "checked": "Thu 08:00",
+  "error": ""
+}

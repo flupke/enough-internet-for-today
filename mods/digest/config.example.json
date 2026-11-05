@@ -1,5 +1,6 @@
 {
-  "times": ["09:00", "18:00"],
+  "morning": "08:00",
+  "slack_every_minutes": 30,
   "interests": "",
   "x_token_file": "~/.config/herdr-digest/x-token",
   "max_pages": 3,

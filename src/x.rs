@@ -86,7 +86,7 @@ impl Api for Http {
         let payload: Value = serde_json::from_str(&response.body_mut().read_to_string()?)?;
         if crate::files::truthy(payload.get("errors")) {
             return Err(shown!(
-                "X returned partial errors; keeping the previous digest and cursor"
+                "X returned partial errors; keeping the previous selection and cursor"
             ));
         }
         Ok(payload)
@@ -96,20 +96,25 @@ impl Api for Http {
 /// Posts at most 12 000 characters long.
 const TEXT_LIMIT: usize = 12_000;
 
-/// The timeline's original posts since `cursor`, or over the past 24 hours without one, newest
-/// first, over at most `max_pages` pages of 100; and whether older posts were left out.
+/// The ID of the user the token belongs to, which the zone keeps: one request fewer per run.
+pub fn me(api: &mut dyn Api) -> Result<String> {
+    let me = api.get("users/me", &[])?;
+    me.pointer("/data/id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| shown!("X did not return the user's ID"))
+}
+
+/// The timeline's original posts strictly after `cursor`, or over the past 24 hours without
+/// one, newest first, over at most `max_pages` pages of 100; and whether older posts were left
+/// out. A page that fails after the first keeps the pages already paid for, marked as such.
 pub fn timeline(
     api: &mut dyn Api,
+    me: &str,
     cursor: Option<&str>,
     now: Timestamp,
     max_pages: i64,
 ) -> Result<(Vec<Post>, bool)> {
-    let me = api.get("users/me", &[])?;
-    let me = me
-        .pointer("/data/id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| shown!("X did not return the user's ID"))?
-        .to_owned();
     let mut params: Vec<(String, String)> = [
         ("max_results", "100"),
         ("expansions", "author_id"),
@@ -132,8 +137,12 @@ pub fn timeline(
     }
     let mut posts: Map<String, Value> = Map::new();
     let page_path = format!("users/{me}/timelines/reverse_chronological");
-    for _ in 0..max_pages {
-        let page = api.get(&page_path, &params)?;
+    for number in 0..max_pages {
+        let page = match api.get(&page_path, &params) {
+            Ok(page) => page,
+            Err(_) if number > 0 => return Ok((collect(&posts)?, true)),
+            Err(e) => return Err(e),
+        };
         let authors: Map<String, Value> = page
             .pointer("/includes/users")
             .and_then(Value::as_array)
@@ -204,7 +213,10 @@ mod tests {
     impl Api for Pages {
         fn get(&mut self, path: &str, params: &[(String, String)]) -> Result<Value> {
             self.1.push((path.to_owned(), params.to_vec()));
-            Ok(self.0.pop_front().expect("no more pages"))
+            match self.0.pop_front().expect("no more pages") {
+                Value::Null => Err(shown!("X returned HTTP 503")),
+                page => Ok(page),
+            }
         }
     }
 
@@ -212,18 +224,17 @@ mod tests {
     fn paginated_timeline_includes_all_posts() {
         let mut api = Pages(
             [
-                json!({"data": {"id": "42"}}),
                 json!({"data": [{"id": "124", "author_id": "a", "text": "new"}], "meta": {"next_token": "page2"}}),
                 json!({"data": [{"id": "123", "author_id": "a", "text": "older"}]}),
             ]
             .into(),
             Vec::new(),
         );
-        let (posts, sampled) = timeline(&mut api, Some("122"), Timestamp::now(), 3).unwrap();
+        let (posts, sampled) = timeline(&mut api, "42", Some("122"), Timestamp::now(), 3).unwrap();
         assert!(!sampled);
         let ids: Vec<_> = posts.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, ["124", "123"]);
-        let (path, params) = &api.1[2];
+        let (path, params) = &api.1[1];
         assert_eq!(path, "users/42/timelines/reverse_chronological");
         assert!(params.contains(&("since_id".into(), "122".into())));
         assert!(params.contains(&("pagination_token".into(), "page2".into())));
@@ -233,18 +244,17 @@ mod tests {
     fn bounded_collection_marks_sampled_coverage() {
         let mut api = Pages(
             [
-                json!({"data": {"id": "42"}}),
                 json!({"data": [{"id": "123", "author_id": "a", "text": "new"}], "meta": {"next_token": "more"}}),
             ]
             .into(),
             Vec::new(),
         );
         let now: Timestamp = "2026-10-30T18:00:00.5Z".parse().unwrap();
-        let (posts, sampled) = timeline(&mut api, None, now, 1).unwrap();
+        let (posts, sampled) = timeline(&mut api, "42", None, now, 1).unwrap();
         assert!(sampled);
         assert_eq!(posts[0].id, "123");
         assert!(
-            api.1[1]
+            api.1[0]
                 .1
                 .contains(&("start_time".into(), "2026-10-29T18:00:00Z".into()))
         );
@@ -254,14 +264,13 @@ mod tests {
     fn prefers_long_text_and_usernames() {
         let mut api = Pages(
             [
-                json!({"data": {"id": "42"}}),
                 json!({"data": [{"id": "1", "author_id": "a", "text": "short", "note_tweet": {"text": "long"}}],
                        "includes": {"users": [{"id": "a", "username": "alice"}]}}),
             ]
             .into(),
             Vec::new(),
         );
-        let (posts, _) = timeline(&mut api, None, Timestamp::now(), 3).unwrap();
+        let (posts, _) = timeline(&mut api, "42", None, Timestamp::now(), 3).unwrap();
         assert_eq!(
             posts,
             [Post {
@@ -270,5 +279,22 @@ mod tests {
                 text: "long".into()
             }]
         );
+    }
+
+    #[test]
+    fn a_failed_later_page_keeps_the_pages_already_paid_for() {
+        let mut api = Pages(
+            [
+                json!({"data": [{"id": "124", "author_id": "a", "text": "new"}], "meta": {"next_token": "page2"}}),
+                Value::Null,
+            ]
+            .into(),
+            Vec::new(),
+        );
+        let (posts, sampled) = timeline(&mut api, "42", Some("122"), Timestamp::now(), 3).unwrap();
+        assert!(sampled);
+        assert_eq!(posts[0].id, "124");
+        let mut first = Pages([Value::Null].into(), Vec::new());
+        assert!(timeline(&mut first, "42", Some("122"), Timestamp::now(), 3).is_err());
     }
 }

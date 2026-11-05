@@ -24,8 +24,8 @@ implementation: rewrite it to assert what users observe, or delete it.
   independent source: an external tool's output, a second code path.
 - The assertion reads what production code produced: a return value, a file the collector
   wrote, the panel's `digest.debug`, a screenshot.
-- A format this repository owns, such as the digest file, the config or the job files, is
-  compared with a hand-written JSON literal, or with `tests/fixtures/latest.json`. A rename
+- A format this repository owns, such as the zone files, the config or the job files, is
+  compared with a hand-written JSON literal, or with the fixtures of `tests/fixtures/`. A rename
   then breaks the test as it would break the files users already have.
 - No test asserts the helper's prompt wording. Test what the code computes for a job, such as
   its candidates and limits, only when computing it is not trivial.

@@ -47,3 +47,9 @@ through `lead@herdr-common`, never an edit of its checkout from here.
 
 `DIGEST_SHOTS=<directory> make test-panel` keeps the panel's screenshots; Read them to see what
 the test saw.
+
+The sandbox's app renders `font_semibold()`, `font_bold()` and `italic()` in the regular face
+of its UI font: a sandbox shot cannot show weights or italics, so hierarchy that must hold
+there comes from size and colour. In the sandbox, `home()` is `/tmp/home`, so the panel's Refresh
+runs `/tmp/home/.local/bin/herdr-digest`: a stand-in script there drives it without a
+collector.

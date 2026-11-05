@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.89"
 license = "MIT"
 publish = false
-description = "Enough Internet for Today: a finite X, Slack and email digest for a herdr-app panel"
+description = "Enough Internet for Today: a finite digest of Slack, email and social media for a herdr-app panel"
 
 [dependencies]
 anyhow = "1.0.104"

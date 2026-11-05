@@ -1,10 +1,10 @@
 [Unit]
-Description=Gather a finite digest from X, Slack and email
+Description=Collect the digest zones that are due: Slack, Email and Social
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/.config/herdr-digest
 ExecStart=%h/.local/bin/herdr-digest collect --due
-TimeoutStartSec=30min
+TimeoutStartSec=45min
 UMask=0077

@@ -30,10 +30,10 @@ outcomes the user can see, not lists of test cases.
 How each kind of change is tested:
 
 - The collector: `make test`.
-- The panel (`mods/digest/`) or the digest file it reads: the panel's eyes and hands above, and
+- The panel (`mods/digest/`) or the zone files it reads: the panel's eyes and hands above, and
   `make test-panel`, which checks that the panel shows what the collector writes.
-- The digest file's fields (`src/collect.rs`): `tests/fixtures/latest.json` follows them, in
-  the same change.
+- The zone files' fields (`src/collect.rs`): `tests/fixtures/digest/` follows them, in the same
+  change.
 - The install (`scripts/install`, `make install`, `systemd/`): run it twice into a temporary
   `HOME`, as [Install](.agents/wiki/install.md) says.
 - The checks (`Makefile`, `flake.nix`, `flake.lock`, `scripts/check`, `scripts/dev-shell`,

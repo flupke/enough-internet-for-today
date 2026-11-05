@@ -57,5 +57,5 @@ pub fn collection_message(error: &anyhow::Error) -> String {
     } else {
         "Error"
     };
-    format!("{kind}: collection failed; previous digest preserved")
+    format!("{kind}: collection failed; previous selection kept")
 }

@@ -1,0 +1,31 @@
+{
+  "next": "Thu 18:00",
+  "slack_scope": "public",
+  "cursor": "2026-11-05T17:30:04.118204+00:00",
+  "items": [
+    {
+      "id": "slack:C0FIXTURE:1762363500.000200",
+      "title": "Fixture: the release moves to Friday",
+      "summary": "The platform team pushed the release by a day to finish the migration checks. QA sign-off is now due Thursday evening.",
+      "why": "Your review slot moves with it.",
+      "source": "Slack · Ana Lopez",
+      "url": "https://fixture.slack.com/archives/C0FIXTURE/p1762363500000200",
+      "at": "2026-11-05T17:30:04.118204+00:00"
+    },
+    {
+      "id": "slack:C0FIXTURE:1762360800.000100",
+      "title": "Fixture: a direct question about the cache budget",
+      "summary": "Sam asks whether the cache can drop to 2 GB per node before the capacity review, and needs an answer today.",
+      "why": "A question addressed to you, with a deadline.",
+      "source": "Slack · Sam Okafor",
+      "url": "https://fixture.slack.com/archives/C0FIXTURE/p1762360800000100",
+      "at": "2026-11-05T17:00:03.402311+00:00"
+    }
+  ],
+  "coverage": "38 inspected",
+  "slot": "2026-11-05T17:30:00",
+  "refreshed": "Thu 17:30",
+  "checked_at": "2026-11-05T17:30:04.118204+00:00",
+  "checked": "Thu 17:30",
+  "error": ""
+}
