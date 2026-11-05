@@ -45,10 +45,29 @@ The collector validates selection IDs, field sizes, time windows, source counts,
 ## Checks
 
 ```
-herdr-app check ~/.config/herdr-app/mods/digest
 python3 -m unittest discover -s mods/digest -p 'test_*.py'
 ```
 
-For herdr-mod-vision, open with `--props '{"demo":true}'`. Commands `digest.sample`, `digest.finish`, `digest.empty`, `digest.failure`, `digest.peek`, and `digest.open:0` use the same action methods as clicks. `digest.debug` in Herdr shared state records the view. Sample commands are ignored outside demo mode.
+The panel is checked with the `herdr-mod-vision` skill in [herdr-common](https://github.com/flupke/herdr-common)'s app sandbox: a private herdr-app, at the release herdr-common's flake pins, on a headless display, so the check never touches your window or `~/.config/herdr-app`. Check herdr-common out beside this repository; it serves checks only, and nothing the digest installs or runs refers to it. Run it from the repository's root; `N` names the sandbox after the checkout, since other agents run sandboxes on the same machine:
+
+```
+S=../herdr-common/skills/herdr-mod-vision/app-sandbox N=digest-$(basename "$PWD" | tr -c "A-Za-z0-9_\n-" -) out=$(mktemp -d)
+$S start $N
+copy=$($S mod $N mods/digest) && $S herdr-app $N check "$copy"
+home=$($S info $N | $S tool jq -r .app_home)
+mkdir -p "$home/data/digest" && cp tests/fixtures/latest.json "$home/data/digest/latest.json"
+$S herdr-app $N do space.new --name vision
+$S herdr-app $N do tab.new --name digest --mod digest
+$S herdr-app $N do app.zoom_out    # fits "Done for now" in the 1400×900 window
+for _ in $(seq 30); do $S tool jq -e '."digest.debug".last == "load"' "$home/shared.json" >/dev/null 2>&1 && break; sleep 1; done
+$S tool jq '."digest.debug" | {error, status, titles: [.items[].title]}' "$home/shared.json"
+$S shot $N "$out/digest.png"       # both fixture items, then "Done for now"
+$S herdr-app $N do digest.finish
+for _ in $(seq 30); do $S tool jq -e '."digest.debug".last == "finish"' "$home/shared.json" >/dev/null 2>&1 && break; sleep 1; done
+$S shot $N "$out/finished.png"     # "You’re caught up."
+$S stop $N
+```
+
+`tests/fixtures/latest.json` is a digest file in the shape `collect.py` writes, which the panel reads as it reads a collected one. For other states, open the tab with `--props '{"demo":true}'`: `digest.sample` and `digest.empty` replace its content, `digest.failure` adds a sample collection error, and all three are ignored outside demo mode. `digest.finish`, `digest.peek` and `digest.open:0` use the same action methods as clicks. `digest.debug` in the app's `shared.json` records what the panel shows, the text to check against the screenshot. A link the panel opens lands in the sandbox's `opened.log`, never in a browser.
 
 References: [X timeline](https://docs.x.com/x-api/users/get-timeline), [X OAuth](https://docs.x.com/fundamentals/authentication/oauth-2-0/user-access-token), [Claude MCP](https://code.claude.com/docs/en/mcp), [Claude permissions](https://code.claude.com/docs/en/permissions).

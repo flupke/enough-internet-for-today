@@ -1,0 +1,36 @@
+{
+  "id": "2026-11-05T17:00:12.402311+00:00",
+  "slot": "2026-11-05T18:00:00",
+  "cursor": "1986123456789012345",
+  "watermarks": {
+    "Slack": "2026-11-05T17:00:12.402311+00:00",
+    "Email": "2026-11-05T17:00:12.402311+00:00"
+  },
+  "slack_scope": "public",
+  "status": "2 selected across X, Slack and email",
+  "next": "Fri 09:00",
+  "items": [
+    {
+      "id": "1986123456789012345",
+      "title": "Fixture: a release with a useful new capability",
+      "summary": "A followed developer announced a release and explained the practical change it brings.",
+      "why": "A concrete update with enough detail to assess.",
+      "source": "X · @fixture_dev",
+      "url": "https://x.com/fixture_dev/status/1986123456789012345"
+    },
+    {
+      "id": "email:fixture-thread-1",
+      "title": "Fixture: a decision waiting in your inbox",
+      "summary": "An email asks for your choice between two dates before tomorrow noon.",
+      "why": "A concrete next action with a deadline.",
+      "source": "Email · fixture sender",
+      "url": "https://mail.google.com/mail/u/0/#inbox/fixture-thread-1"
+    }
+  ],
+  "sources": [
+    "X · 42 new posts",
+    "Slack · 17 inspected",
+    "Email · 9 inspected"
+  ],
+  "profile": false
+}
